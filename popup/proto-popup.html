@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CNR Proto Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 480px;
+      min-height: 560px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 12px;
+      background: #0d1117;
+      color: #c9d1d9;
+    }
+
+    header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header h1 { font-size: 13px; font-weight: 600; color: #e6edf3; flex: 1; }
+    .badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .badge-green  { background: #1a4731; color: #3fb950; }
+    .badge-yellow { background: #3d2e0e; color: #d29922; }
+    .badge-red    { background: #3d1414; color: #f85149; }
+    .badge-grey   { background: #21262d; color: #8b949e; }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #21262d;
+      align-items: center;
+    }
+
+    button {
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 10px;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+
+    #btn-dashboard { background: #1f6feb; color: #fff; }
+    #btn-toggle    { background: #238636; color: #fff; }
+    #btn-toggle.off { background: #30363d; color: #8b949e; }
+    #btn-auto      { background: #da3633; color: #fff; }
+    #btn-auto.on   { background: #388bfd; color: #fff; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: #21262d;
+      border-bottom: 1px solid #21262d;
+    }
+    .panel {
+      background: #0d1117;
+      padding: 10px 14px;
+    }
+    .panel h2 {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8b949e;
+      margin-bottom: 6px;
+    }
+
+    .kv { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .kv .k { color: #8b949e; }
+    .kv .v { color: #e6edf3; font-weight: 600; }
+
+    .cards-row {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .card {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 6px;
+      border-radius: 4px;
+      background: #161b22;
+      border: 1px solid #30363d;
+    }
+    .card.s, .card.c { color: #c9d1d9; }
+    .card.h, .card.d { color: #f85149; }
+
+    .decision-box {
+      padding: 10px 14px;
+      border-bottom: 1px solid #21262d;
+    }
+    .decision-box h2 {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8b949e;
+      margin-bottom: 6px;
+    }
+    .decision-action {
+      font-size: 18px;
+      font-weight: 700;
+      color: #3fb950;
+      margin-bottom: 4px;
+    }
+    .decision-action.FOLD   { color: #f85149; }
+    .decision-action.CHECK  { color: #8b949e; }
+    .decision-action.CALL   { color: #d29922; }
+    .decision-action.RAISE  { color: #388bfd; }
+    .decision-action.BET    { color: #3fb950; }
+    .decision-action.ALL_IN { color: #bc8cff; }
+    .decision-reason { color: #8b949e; font-size: 11px; }
+
+    .events-section {
+      padding: 10px 14px;
+    }
+    .events-section h2 {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8b949e;
+      margin-bottom: 6px;
+    }
+    #events-list {
+      list-style: none;
+      max-height: 130px;
+      overflow-y: auto;
+    }
+    #events-list li {
+      display: flex;
+      gap: 8px;
+      padding: 2px 0;
+      border-bottom: 1px solid #161b22;
+      font-size: 11px;
+    }
+    .ev-time { color: #444c56; width: 50px; flex-shrink: 0; }
+    .ev-ns   { color: #8b949e; width: 70px; flex-shrink: 0; }
+    .ev-topic { color: #388bfd; flex: 1; }
+
+    footer {
+      padding: 8px 14px;
+      color: #444c56;
+      font-size: 10px;
+      border-top: 1px solid #21262d;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .empty { color: #444c56; font-style: italic; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>&#x1F0A0; CNR Proto Bot</h1>
+  <span id="tap-status" class="badge badge-grey">Tap: ...</span>
+  <span id="bot-status" class="badge badge-grey">Bot: ...</span>
+</header>
+
+<div class="controls">
+  <button id="btn-dashboard">&#x1F680; Open Dashboard</button>
+  <button id="btn-toggle" class="off">Bot: OFF</button>
+  <button id="btn-auto">Auto-Act: OFF</button>
+  <span id="phase-badge" class="badge badge-grey">idle</span>
+</div>
+
+<div class="grid">
+  <!-- Game state panel -->
+  <div class="panel">
+    <h2>Game State</h2>
+    <div class="kv"><span class="k">Positions</span><span class="v" id="gs-room">—</span></div>
+    <div class="kv"><span class="k">Phase</span><span class="v" id="gs-phase">—</span></div>
+    <div class="kv"><span class="k">Pot</span><span class="v" id="gs-pot">—</span></div>
+    <div class="kv"><span class="k">Stack</span><span class="v" id="gs-stack">—</span></div>
+    <div class="kv"><span class="k">Turn</span><span class="v" id="gs-seat">—</span></div>
+    <div class="cards-row" id="gs-hole"></div>
+  </div>
+
+  <!-- Board / stats panel -->
+  <div class="panel">
+    <h2>Board &amp; Stats</h2>
+    <div class="cards-row" id="gs-board"></div>
+    <div style="margin-top:8px;">
+      <div class="kv"><span class="k">Players</span><span class="v" id="stat-hands">0</span></div>
+      <div class="kv"><span class="k">In Hand</span><span class="v" id="stat-won">0</span></div>
+      <div class="kv"><span class="k">Net</span><span class="v" id="stat-net">0</span></div>
+      <div class="kv"><span class="k">Decisions</span><span class="v" id="stat-decisions">0</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Decision -->
+<div class="decision-box">
+  <h2>Last Decision</h2>
+  <div id="decision-action" class="decision-action empty">waiting...</div>
+  <div id="decision-reason" class="decision-reason"></div>
+  <div id="decision-equity" class="decision-reason" style="margin-top:2px;"></div>
+</div>
+
+<!-- Recent events -->
+<div class="events-section">
+  <h2>Recent Proto Events</h2>
+  <ul id="events-list">
+    <li><span class="empty">No events yet</span></li>
+  </ul>
+</div>
+
+<footer>
+  <span id="footer-decoded">decoded: 0</span>
+  <span id="footer-relay">relay: disconnected</span>
+  <span id="footer-ts">—</span>
+</footer>
+
+<script src="proto-popup.js"></script>
+</body>
+</html>

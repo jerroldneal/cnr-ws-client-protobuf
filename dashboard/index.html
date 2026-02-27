@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CNR Proto Dashboard</title>
+  <!-- React 18 UMD (localhost — CSP not a concern) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel standalone for JSX transformation in-browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --muted:     #8b949e;
+      --text:      #e6edf3;
+      --green:     #3fb950;
+      --blue:      #388bfd;
+      --yellow:    #d29922;
+      --red:       #f85149;
+      --purple:    #bc8cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+    }
+
+    /* ── Layout ── */
+    .app { display: flex; flex-direction: column; height: 100vh; }
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 48px;
+      flex-shrink: 0;
+    }
+    .topbar h1 { font-size: 15px; font-weight: 700; }
+    .tabs { display: flex; gap: 4px; margin-left: auto; }
+    .tab {
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .tab.active { background: var(--blue); color: #fff; }
+    .tab:hover:not(.active) { background: #21262d; color: var(--text); }
+
+    .status-dots { display: flex; gap: 8px; align-items: center; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #333; }
+    .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.red   { background: var(--red); }
+    .dot-label { font-size: 11px; color: var(--muted); }
+
+    .content { flex: 1; overflow: hidden; display: flex; }
+
+    /* ── Proto Feed tab ── */
+    .feed-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .feed-toolbar {
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .feed-toolbar input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      color: var(--text);
+      font-size: 12px;
+      width: 200px;
+    }
+    .feed-toolbar input::placeholder { color: var(--muted); }
+    .btn-sm {
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .btn-sm:hover { background: #21262d; }
+
+    .feed-list {
+      flex: 1;
+      overflow-y: auto;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 11px;
+    }
+    .feed-row {
+      display: grid;
+      grid-template-columns: 56px 64px 200px 1fr;
+      gap: 8px;
+      padding: 4px 16px;
+      border-bottom: 1px solid #161b22;
+      align-items: start;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .feed-row:hover { background: #1c2128; }
+    .feed-row.expanded { background: #1c2128; }
+    .feed-row .f-time  { color: var(--muted); }
+    .feed-row .f-ns    { color: var(--yellow); }
+    .feed-row .f-topic { color: var(--blue); font-weight: 600; }
+    .feed-row .f-data  { color: #adbac7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .feed-detail {
+      background: #1c2128;
+      padding: 8px 16px 8px 64px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 11px;
+      color: #adbac7;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border-bottom: 1px solid #21262d;
+    }
+
+    /* ── Poker Table tab ── */
+    .table-pane { flex: 1; display: flex; overflow: hidden; }
+    .table-visual {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .poker-table-felt {
+      width: 560px;
+      height: 300px;
+      border-radius: 150px;
+      background: radial-gradient(ellipse at center, #1a4731 0%, #0f2b1f 100%);
+      border: 8px solid #5a3e1b;
+      box-shadow: 0 0 40px rgba(0,0,0,0.6), inset 0 0 20px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    .table-board-cards {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .table-pot {
+      position: absolute;
+      top: calc(50% + 28px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.5);
+      padding: 3px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--yellow);
+    }
+    .felt-card {
+      width: 36px;
+      height: 50px;
+      border-radius: 5px;
+      background: #fff;
+      border: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .felt-card.hearts, .felt-card.diamonds { color: #c0392b; }
+    .felt-card.spades, .felt-card.clubs    { color: #1a1a2e; }
+    .felt-card.back { background: #1f6feb; color: transparent; }
+
+    .seat-chip {
+      position: absolute;
+      width: 80px;
+      background: rgba(13,17,23,0.9);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 6px;
+      text-align: center;
+      font-size: 10px;
+      transform: translate(-50%, -50%);
+    }
+    .seat-chip.hero { border-color: var(--blue); box-shadow: 0 0 8px var(--blue); }
+    .seat-nick { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .seat-stack { color: var(--green); font-weight: 700; }
+    .seat-cards { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
+    .seat-number {
+      position: absolute;
+      top: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .seat-position {
+      position: absolute;
+      bottom: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      color: var(--muted);
+    }
+    .seat-dealer {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      width: 16px; height: 16px;
+      background: var(--yellow);
+      color: #000;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 9px;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 16px;
+    }
+    .seat-empty {
+      position: absolute;
+      bottom: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .mini-card { font-size: 11px; font-weight: 700; }
+    .mini-card.h, .mini-card.d { color: #f85149; }
+
+    .table-sidebar {
+      width: 240px;
+      border-left: 1px solid var(--border);
+      padding: 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .sidebar-section h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; font-weight: 700; letter-spacing: 0.04em; }
+
+    /* ── Bot Console tab ── */
+    .console-pane { flex: 1; display: flex; overflow: hidden; gap: 0; }
+    .decision-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+    .decision-entry {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .de-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .de-action {
+      font-size: 14px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .de-action.FOLD   { background: #3d1414; color: var(--red); }
+    .de-action.CHECK  { background: #21262d; color: var(--muted); }
+    .de-action.CALL   { background: #3d2e0e; color: var(--yellow); }
+    .de-action.RAISE, .de-action.BET { background: #0d2044; color: var(--blue); }
+    .de-action.ALL_IN { background: #2a1a4a; color: var(--purple); }
+    .de-equity { font-size: 11px; color: var(--muted); }
+    .de-reason { font-size: 11px; color: #adbac7; margin-top: 2px; }
+    .de-hand { font-size: 11px; color: var(--green); }
+
+    /* ── Stats tab ── */
+    .stats-pane { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .stat-card .sc-label { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; }
+    .stat-card .sc-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+
+    .topic-table { width: 100%; border-collapse: collapse; }
+    .topic-table th, .topic-table td { padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .topic-table th { color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; }
+    .topic-bar { height: 6px; border-radius: 3px; background: var(--blue); display: inline-block; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── Suit helpers ─────────────────────────────────────────────────────────────
+const SUIT_NAME = { s:'spades', h:'hearts', d:'diamonds', c:'clubs', '♠':'spades', '♥':'hearts', '♦':'diamonds', '♣':'clubs' };
+const SUIT_SYMBOL = { s:'♠', h:'♥', d:'♦', c:'♣', '♠':'♠', '♥':'♥', '♦':'♦', '♣':'♣' };
+const SUIT_KEY = { s:'s', h:'h', d:'d', c:'c', '♠':'s', '♥':'h', '♦':'d', '♣':'c' };
+
+function parseCard(str) {
+  if (!str || str === 'back' || str.length < 2) return null;
+  // Last char may be unicode suit (♠♥♦♣) or letter (s/h/d/c)
+  const last = str.slice(-1);
+  if (SUIT_NAME[last]) return { rank: str.slice(0, -1), suit: last };
+  return null;
+}
+
+function CardDisplay({ str, size = 'normal', back = false }) {
+  if (back || str === 'back') return size === 'mini'
+    ? <span className="mini-card" style={{color:'var(--blue)'}}>🂠</span>
+    : <div className="felt-card back" />;
+  const parsed = parseCard(str);
+  if (!parsed) return <div className="felt-card back" />;
+  const { rank, suit } = parsed;
+  const suitName = SUIT_NAME[suit] || 'spades';
+  const suitSym = SUIT_SYMBOL[suit] || suit;
+  const suitKey = SUIT_KEY[suit] || 's';
+  if (size === 'mini') return <span className={`mini-card ${suitKey}`}>{rank}{suitSym}</span>;
+  return (
+    <div className={`felt-card ${suitName}`}>
+      <span>{rank}</span>
+      <span style={{fontSize:'10px'}}>{suitSym}</span>
+    </div>
+  );
+}
+
+// ── Seat positions around the table (9 seats, clockwise from top) ────────────
+const SEAT_POS = [
+  { top:'5%',  left:'50%' },   // 0 – top center
+  { top:'10%', left:'75%' },   // 1
+  { top:'30%', left:'90%' },   // 2
+  { top:'55%', left:'92%' },   // 3
+  { top:'75%', left:'78%' },   // 4
+  { top:'88%', left:'50%' },   // 5 – bottom middle (hero)
+  { top:'75%', left:'22%' },   // 6
+  { top:'55%', left:'8%'  },   // 7
+  { top:'30%', left:'10%' },   // 8
+  { top:'10%', left:'25%' },   // 9
+];
+
+// Seat position labels (clockwise from top)
+const SEAT_POSITIONS = [
+  'Button',      // 0
+  'Small Blind', // 1
+  'Big Blind',   // 2
+  'UTG',         // 3
+  'MP',          // 4
+  'CO',          // 5
+  'BTN',         // 6
+  'SB',          // 7
+  'BB',          // 8
+  'UTG+1'        // 9
+];
+
+function fmt(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return String(n||0);
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const [tab, setTab]           = useState('feed');
+  const [ws, setWs]             = useState(null);
+  const [wsReady, setWsReady]   = useState(false);
+  const [events, setEvents]     = useState([]);
+  const [gameState, setGameState] = useState(null);
+  const [botStats, setBotStats] = useState(null);
+  const [topicCounts, setTopicCounts] = useState({});
+  const [filter, setFilter]     = useState('');
+  const [expanded, setExpanded] = useState(null);
+  const [paused, setPaused]     = useState(false);
+  const pausedRef               = useRef(false);
+  const eventsRef               = useRef([]);
+
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+
+  // ── WebSocket connection to relay ────────────────────────────────────────
+  useEffect(() => {
+    function connect() {
+      const socket = new WebSocket('ws://localhost:13030/ws');
+      socket.onopen = () => { setWsReady(true); setWs(socket); };
+      socket.onclose = () => { setWsReady(false); setTimeout(connect, 2000); };
+      socket.onerror = () => socket.close();
+      socket.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+
+          // Skip internal relay messages
+          if (['welcome','registered','ack','pong'].includes(msg.type)) return;
+
+          // game_status broadcast from relay (cocos2d game state)
+          if (msg.type === 'game_status' && msg.data) {
+            setGameState(msg.data);
+            if (!pausedRef.current) {
+              const entry = {
+                id: Date.now() + Math.random(),
+                ts: msg.data.timestamp || Date.now(),
+                ns: 'game',
+                topic: msg.data.street || 'status',
+                data: msg.data
+              };
+              eventsRef.current = [entry, ...eventsRef.current].slice(0, 500);
+              setEvents([...eventsRef.current]);
+              setTopicCounts(prev => ({ ...prev, ['game:' + (msg.data.street||'status')]: (prev['game:' + (msg.data.street||'status')]||0)+1 }));
+            }
+            return;
+          }
+
+          // card_event broadcast from relay
+          if (msg.type === 'card_event' && msg.data) {
+            if (!pausedRef.current) {
+              const entry = {
+                id: Date.now() + Math.random(),
+                ts: msg.data.timestamp || msg.timestamp || Date.now(),
+                ns: 'card',
+                topic: msg.data.eventType || 'card_event',
+                data: msg.data
+              };
+              eventsRef.current = [entry, ...eventsRef.current].slice(0, 500);
+              setEvents([...eventsRef.current]);
+              setTopicCounts(prev => ({ ...prev, [entry.topic]: (prev[entry.topic]||0)+1 }));
+            }
+            return;
+          }
+
+          // Proto events from proto-tap (if relay forwards them)
+          if (msg.type === 'proto_event') {
+            if (!pausedRef.current) {
+              const entry = { id: Date.now() + Math.random(), ts: msg.ts || Date.now(), ...msg };
+              eventsRef.current = [entry, ...eventsRef.current].slice(0, 500);
+              setEvents([...eventsRef.current]);
+              setTopicCounts(prev => ({ ...prev, [msg.topic]: (prev[msg.topic]||0)+1 }));
+            }
+            return;
+          }
+
+          // Game state snapshot (proto-bot format)
+          if (msg.type === 'game_state') { setGameState(msg.state); return; }
+
+          // Bot stats
+          if (msg.type === 'bot_stats') { setBotStats(msg.stats); return; }
+
+          // Any other broadcast — show in feed
+          if (!pausedRef.current) {
+            const entry = {
+              id: Date.now() + Math.random(),
+              ts: msg.timestamp || Date.now(),
+              ns: msg.type,
+              topic: msg.type,
+              data: msg.data || msg
+            };
+            eventsRef.current = [entry, ...eventsRef.current].slice(0, 500);
+            setEvents([...eventsRef.current]);
+            setTopicCounts(prev => ({ ...prev, [msg.type]: (prev[msg.type]||0)+1 }));
+          }
+        } catch (_) {}
+      };
+    }
+    connect();
+  }, []);
+
+  const filteredEvents = filter
+    ? events.filter(e => e.topic?.toLowerCase().includes(filter.toLowerCase()) || e.ns?.toLowerCase().includes(filter.toLowerCase()))
+    : events;
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <span style={{fontSize:'18px'}}>&#x1F0A0;</span>
+        <h1>CNR Proto Dashboard</h1>
+        <div className="status-dots">
+          <div className={`dot ${wsReady ? 'green' : 'red'}`} />
+          <span className="dot-label">{wsReady ? 'Relay connected' : 'Relay disconnected'}</span>
+        </div>
+        {gameState && (
+          <span style={{fontSize:'11px', color:'var(--muted)'}}>
+            {gameState.street || gameState.phase || 'idle'} &nbsp;|&nbsp; Pot: {gameState.pot || '—'}
+            {gameState.activeTurn ? <> &nbsp;|&nbsp; Turn: <b style={{color:'var(--green)'}}>{gameState.activeTurn.name}</b></> : null}
+          </span>
+        )}
+        <div className="tabs">
+          {['feed','table','console','stats'].map(t => (
+            <button key={t} className={`tab ${tab===t?'active':''}`} onClick={() => setTab(t)}>
+              {t.charAt(0).toUpperCase()+t.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="content">
+        {tab === 'feed'    && <FeedTab events={filteredEvents} filter={filter} setFilter={setFilter} paused={paused} setPaused={setPaused} expanded={expanded} setExpanded={setExpanded} />}
+        {tab === 'table'   && <TableTab gs={gameState} botStats={botStats} />}
+        {tab === 'console' && <ConsoleTab botStats={botStats} />}
+        {tab === 'stats'   && <StatsTab topicCounts={topicCounts} botStats={botStats} eventsTotal={events.length} />}
+      </div>
+    </div>
+  );
+}
+
+// ── Proto Feed ───────────────────────────────────────────────────────────────
+function FeedTab({ events, filter, setFilter, paused, setPaused, expanded, setExpanded }) {
+  return (
+    <div className="feed-pane">
+      <div className="feed-toolbar">
+        <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter by topic or ns..." />
+        <button className="btn-sm" onClick={() => setPaused(p => !p)}>
+          {paused ? '▶ Resume' : '⏸ Pause'}
+        </button>
+        <span style={{color:'var(--muted)',fontSize:'11px', marginLeft:'auto'}}>{events.length} events</span>
+      </div>
+      <div className="feed-list">
+        {events.length === 0 && <div style={{padding:'20px',color:'var(--muted)'}}>No events. Waiting for proto traffic...</div>}
+        {events.map(ev => {
+          const ts   = new Date(ev.ts);
+          const time = ts.toTimeString().slice(0,8);
+          const isExp= expanded === ev.id;
+          return (
+            <React.Fragment key={ev.id}>
+              <div className={`feed-row ${isExp?'expanded':''}`} onClick={() => setExpanded(isExp ? null : ev.id)}>
+                <span className="f-time">{time}</span>
+                <span className="f-ns">{ev.ns||'?'}</span>
+                <span className="f-topic">{ev.topic||'?'}</span>
+                <span className="f-data">{JSON.stringify(ev.data||{})}</span>
+              </div>
+              {isExp && (
+                <div className="feed-detail">{JSON.stringify(ev.data||{}, null, 2)}</div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Poker Table ──────────────────────────────────────────────────────────────
+function TableTab({ gs, botStats }) {
+  if (!gs) return <div style={{padding:'40px',color:'var(--muted)'}}>Waiting for game state...</div>;
+
+  // Support both relay game_status format (gs.players[]) and proto-bot format (gs.seats{})
+  const isRelayFormat = Array.isArray(gs.players);
+  const players = isRelayFormat ? gs.players : Object.values(gs.seats || {});
+  const phase = gs.street || gs.phase || 'idle';
+  const pot = gs.pot || fmt(gs.totalPot || 0);
+  const dealerSeat = gs.dealer?.seat ?? gs.dealerPos;
+
+  // Board cards: relay format has communityCards[{label,card}], proto has boardCardStrings[]
+  const communitySlots = isRelayFormat ? (gs.communityCards || []) : [];
+  const boardCards = isRelayFormat
+    ? communitySlots.map(c => c.card).filter(Boolean)
+    : (gs.boardCardStrings || []);
+  const anyBoardDealt = boardCards.length > 0;
+
+  return (
+    <div className="table-pane">
+      <div className="table-visual">
+        <div className="poker-table-felt">
+          {/* Board cards */}
+          <div className="table-board-cards">
+            {isRelayFormat
+              ? communitySlots.map((c,i) => c.card
+                  ? <CardDisplay key={i} str={c.card} />
+                  : <div key={i} className="felt-card back" />
+                )
+              : boardCards.length > 0
+                ? boardCards.map((c,i) => <CardDisplay key={i} str={c} />)
+                : [0,1,2,3,4].map(i => <div key={i} className="felt-card back" />)
+            }
+          </div>
+          {/* Pot */}
+          <div className="table-pot">Pot: {pot}</div>
+        </div>
+
+        {/* Seat chips */}
+        {players.slice(0,10).map((p, idx) => {
+          const seatNum = p.seat ?? p.seatNum ?? idx;
+          const name = p.name || p.nickName || ('Seat ' + seatNum);
+          const stack = p.stack || fmt(p.deskCoin || 0);
+          const isHero = p.isActiveTurn || seatNum === gs.heroSeat;
+          const isDealer = seatNum === dealerSeat || p.isDealer;
+          const pos = SEAT_POS[seatNum % SEAT_POS.length] || SEAT_POS[0];
+
+          // Player cards: relay format has cards[] as {revealed, card} objects
+          const rawCards = isRelayFormat
+            ? (p.cards || [])
+            : (seatNum === gs.heroSeat ? (gs.holeCardStrings || []).map(c => ({revealed:true, card:c})) : []);
+          // Cards present means player is in the hand
+          const hasCards = rawCards.length > 0;
+          const isFolded = p.lastAction === 'FOLD';
+          const isEmpty = !p.name && !p.nickName;
+
+          return (
+            <div
+              key={seatNum}
+              className={`seat-chip ${isHero?'hero':''} ${isDealer?'dealer':''}`}
+              style={{ top: pos.top, left: pos.left }}
+            >
+              <div className="seat-nick">{name}</div>
+              <div className="seat-stack">{stack}</div>
+              {isDealer && <div className="seat-dealer">D</div>}
+              <div className="seat-number">#{seatNum}</div>
+              {(p.position || p.isDealer || p.isSB || p.isBB) && (
+                <div className="seat-position">{p.position || (p.isDealer ? 'BTN' : p.isSB ? 'SB' : p.isBB ? 'BB' : '')}</div>
+              )}
+              {hasCards && !isFolded && (
+                <div className="seat-cards">
+                  {rawCards.map((c,i) => {
+                    const cardObj = typeof c === 'string' ? {revealed:true, card:c} : c;
+                    return <CardDisplay key={i} str={cardObj.card} size="mini" back={!cardObj.revealed} />;
+                  })}
+                </div>
+              )}
+              {isFolded && (
+                <div className="seat-cards">
+                  <span style={{color:'var(--red)',fontSize:'10px'}}>FOLD</span>
+                </div>
+              )}
+              {!hasCards && !isFolded && !isEmpty && (
+                <div className="seat-cards">
+                  <span style={{color:'var(--muted)',fontSize:'10px'}}>out</span>
+                </div>
+              )}
+              {isEmpty && <div className="seat-empty">empty</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="table-sidebar">
+        <div className="sidebar-section">
+          <h3>Game Info</h3>
+          <div style={{display:'flex',flexDirection:'column',gap:'4px',fontSize:'12px'}}>
+            <div><span style={{color:'var(--muted)'}}>Phase: </span><b style={{color:'var(--blue)'}}>{phase}</b></div>
+            <div><span style={{color:'var(--muted)'}}>Pot: </span><b style={{color:'var(--yellow)'}}>{pot}</b></div>
+            <div><span style={{color:'var(--muted)'}}>Players: </span>{gs.occupiedCount || players.length}/{(gs.occupiedCount||0)+(gs.emptyCount||0) || '?'}</div>
+            {gs.dealer && <div><span style={{color:'var(--muted)'}}>Dealer: </span>seat {gs.dealer.seat}</div>}
+            {gs.sb && <div><span style={{color:'var(--muted)'}}>SB: </span>seat {gs.sb.seat}</div>}
+            {gs.bb && <div><span style={{color:'var(--muted)'}}>BB: </span>seat {gs.bb.seat}</div>}
+            {gs.activeTurn && <div><span style={{color:'var(--muted)'}}>Turn: </span><b style={{color:'var(--green)'}}>{gs.activeTurn.name} (#{gs.activeTurn.seat})</b></div>}
+            {gs.heroSeat != null && <div><span style={{color:'var(--muted)'}}>Hero seat: </span>{gs.heroSeat}</div>}
+            {gs.heroStack != null && <div><span style={{color:'var(--muted)'}}>Stack: </span><span style={{color:'var(--green)'}}>{fmt(gs.heroStack)}</span></div>}
+          </div>
+        </div>
+
+        {gs.isHeroTurn && gs.currentAct && (
+          <div className="sidebar-section" style={{background:'#0d2044',border:'1px solid var(--blue)',borderRadius:'8px',padding:'10px'}}>
+            <h3 style={{color:'var(--blue)'}}>Your Turn</h3>
+            <div style={{fontSize:'12px',marginTop:'4px'}}>
+              <div>Call: {fmt(gs.currentAct.optCoin||0)}</div>
+              <div>Min bet: {fmt(gs.currentAct.minBetCoin||0)}</div>
+              <div>Stack: {fmt(gs.currentAct.deskCoin||0)}</div>
+            </div>
+          </div>
+        )}
+
+        {botStats?.lastDecision && (
+          <div className="sidebar-section">
+            <h3>Bot Recommendation</h3>
+            <div style={{fontSize:'14px',fontWeight:'700',color:`var(--${
+              {FOLD:'red',RAISE:'blue',BET:'green',CALL:'yellow',CHECK:'muted',ALL_IN:'purple'}[botStats.lastDecision.name]||'text'
+            })`}}>
+              {botStats.lastDecision.name}
+              {botStats.lastDecision.coin > 0 && ` ${fmt(botStats.lastDecision.coin)}`}
+            </div>
+            <div style={{fontSize:'11px',color:'var(--muted)',marginTop:'3px'}}>{botStats.lastDecision.reason}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Bot Console ──────────────────────────────────────────────────────────────
+function ConsoleTab({ botStats }) {
+  if (!botStats) return <div style={{padding:'40px',color:'var(--muted)'}}>No bot data yet. Bot activates on first NeedActionMsg.</div>;
+  const history = botStats.decisionHistory || [];
+
+  return (
+    <div className="console-pane">
+      <div className="decision-history">
+        <div style={{marginBottom:'12px',display:'flex',gap:'10px',fontSize:'12px'}}>
+          <span style={{color:'var(--muted)'}}>Enabled: <b style={{color: botStats.enabled ? 'var(--green)':'var(--red)'}}>{botStats.enabled?'Yes':'No'}</b></span>
+          <span style={{color:'var(--muted)'}}>Auto-Act: <b style={{color: botStats.autoAct ? 'var(--blue)':'var(--muted)'}}>{botStats.autoAct?'ON':'OFF'}</b></span>
+          <span style={{color:'var(--muted)'}}>Decisions: <b style={{color:'var(--text)'}}>{botStats.decisions||0}</b></span>
+        </div>
+        {history.length === 0 && <div style={{color:'var(--muted)'}}>No decisions yet.</div>}
+        {history.map((d, i) => (
+          <div key={i} className="decision-entry">
+            <div className="de-header">
+              <span className={`de-action ${d.name}`}>{d.name}{d.coin>0?` +${fmt(d.coin)}`:''}</span>
+              <span className="de-equity">Equity: {((d.equity||0)*100).toFixed(0)}%</span>
+              {d.handName && <span className="de-hand">{d.handName}</span>}
+              <span style={{marginLeft:'auto',fontSize:'10px',color:'var(--muted)'}}>{new Date(d.ts||0).toTimeString().slice(0,8)}</span>
+            </div>
+            <div className="de-reason">{d.reason}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+function StatsTab({ topicCounts, botStats, eventsTotal }) {
+  const topics = Object.entries(topicCounts).sort((a,b)=>b[1]-a[1]);
+  const maxCount = topics[0]?.[1] || 1;
+
+  return (
+    <div className="stats-pane">
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="sc-label">Events Decoded</div>
+          <div className="sc-value" style={{color:'var(--blue)'}}>{eventsTotal}</div>
+        </div>
+        <div className="stat-card">
+          <div className="sc-label">Unique Topics</div>
+          <div className="sc-value" style={{color:'var(--green)'}}>{topics.length}</div>
+        </div>
+        {botStats && <>
+          <div className="stat-card">
+            <div className="sc-label">Hands Played</div>
+            <div className="sc-value">{botStats.handsPlayed||0}</div>
+          </div>
+          <div className="stat-card">
+            <div className="sc-label">Hands Won</div>
+            <div className="sc-value" style={{color:'var(--green)'}}>{botStats.handsWon||0}</div>
+          </div>
+          <div className="stat-card">
+            <div className="sc-label">Win Rate</div>
+            <div className="sc-value" style={{color:'var(--yellow)'}}>
+              {botStats.handsPlayed ? ((botStats.handsWon/botStats.handsPlayed)*100).toFixed(0)+'%' : '—'}
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="sc-label">Net Profit</div>
+            <div className="sc-value" style={{color:(botStats.netProfit||0)>=0?'var(--green)':'var(--red)'}}>
+              {fmt(botStats.netProfit||0)}
+            </div>
+          </div>
+        </>}
+      </div>
+
+      <div>
+        <h3 style={{color:'var(--muted)',fontSize:'11px',textTransform:'uppercase',fontWeight:'700',letterSpacing:'0.04em',marginBottom:'10px'}}>
+          Messages by Topic
+        </h3>
+        <table className="topic-table">
+          <thead><tr><th>Topic</th><th>Count</th><th style={{width:'200px'}}>Frequency</th></tr></thead>
+          <tbody>
+            {topics.slice(0,30).map(([topic, count]) => (
+              <tr key={topic}>
+                <td style={{color:'var(--blue)'}}>{topic}</td>
+                <td style={{color:'var(--text)'}}>{count}</td>
+                <td><span className="topic-bar" style={{width: `${(count/maxCount)*180}px`}} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

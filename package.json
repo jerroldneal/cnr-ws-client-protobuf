@@ -1,0 +1,12 @@
+{
+  "name": "cnr-ws-client-protobuf",
+  "version": "1.0.0",
+  "description": "ClubWPT Gold protobuf WebSocket client, poker bot engine, and React dashboard",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["poker", "protobuf", "bot", "clubwpt", "holdem"],
+  "author": "",
+  "license": "ISC"
+}
