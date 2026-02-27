@@ -1,10 +1,12 @@
 # cnr-ws-client-protobuf
 
+> **Repo**: [`jerroldneal/cnr-ws-client-protobuf`](https://github.com/jerroldneal/cnr-ws-client-protobuf) · **Submodule of**: [`chrome-native-relay`](https://github.com/jerroldneal/chrome-native-relay) at `cnr-ws-client-protobuf/`
+
 Protobuf WebSocket tap, poker decision engine, Chrome extension popup, and React dashboard for ClubWPT Gold hold'em tables.
 
 ## Overview
 
-This module provides the core components for intercepting, decoding, and acting on protobuf-encoded WebSocket traffic from ClubWPT Gold poker games. It is designed to be injected into the game page via the `cnr-ws-extension` Chrome extension.
+This module provides the core components for intercepting, decoding, and acting on protobuf-encoded WebSocket traffic from ClubWPT Gold poker games. It is designed to be injected into the game page via the [`cnr-ws-extension`](https://github.com/jerroldneal/cnr-ws-extension) Chrome extension.
 
 ## Structure
 
@@ -94,7 +96,7 @@ React 18 SPA (UMD + Babel standalone, no build step). Connects to `ws://localhos
 
 ## Extension Integration
 
-The `cnr-ws-extension` manifest includes two content script entries for this module:
+The [`cnr-ws-extension`](https://github.com/jerroldneal/cnr-ws-extension) manifest includes two content script entries for this module:
 
 ```json
 {
