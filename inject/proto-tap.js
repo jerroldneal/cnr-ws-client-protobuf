@@ -16,10 +16,10 @@
 (function installCNRProtoTapV2() {
   'use strict';
 
-  const VERSION = 2;
+  const VERSION = 3;
   const BUILD_HASH = '__PROTO_TAP_BUILD_HASH__'; // replaced at PIA build time
   if (window.__ProtoTap && window.__ProtoTap.version >= VERSION) {
-    console.warn('[ProtoTap v2] Already installed (v' + window.__ProtoTap.version + ', build ' + (window.__ProtoTap.buildHash || 'unknown') + '). To force re-inject: delete window.__ProtoTap');
+    console.warn('[ProtoTap v3] Already installed (v' + window.__ProtoTap.version + ', build ' + (window.__ProtoTap.buildHash || 'unknown') + '). To force re-inject: delete window.__ProtoTap');
     return;
   }
 
@@ -94,6 +94,9 @@
   const lastEvents = [];
   const unknownFrames = [];    // unknown-msgId frames for offline analysis
   const UNKNOWN_RING  = 500;  // keep more — these are rare & small
+  const outgoingActions = [];  // Outgoing ActionReq log (send hook)
+  const OUTGOING_RING  = 50;
+  const ACTION_NAMES = { 0:'NONE', 1:'CHECK', 2:'CALL', 3:'BET', 4:'FOLD', 5:'RAISE', 6:'ALL_IN' };
 
   function pushRing(evt) {
     lastEvents.push(evt);
@@ -275,6 +278,54 @@
       }
     });
 
+    // Hook ws.send to intercept outgoing messages (ActionReq verification)
+    const origSend = ws.send.bind(ws);
+    ws.send = function(data) {
+      if (pb && (data instanceof ArrayBuffer || (data && data.byteLength !== undefined))) {
+        try {
+          const buf = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength);
+          // Try Wrapper decode
+          for (const ns of GAME_NAMESPACES) {
+            const nsObj = pb[ns];
+            if (!nsObj || !nsObj.Wrapper) continue;
+            let w;
+            try { w = nsObj.Wrapper.decode(buf); } catch (_) { continue; }
+            if (!w || !w.topic) continue;
+            const typeName = w.topic.includes('.') ? w.topic.split('.').pop() : w.topic;
+            // Decode body if we have a decoder
+            let decoded = null;
+            const decoder = nsObj[typeName];
+            if (decoder && w.body && w.body.length > 0) {
+              try { decoded = JSON.parse(JSON.stringify(decoder.decode(w.body))); } catch (_) {}
+            }
+            const entry = {
+              type: 'outgoing',
+              topic: typeName,
+              ns,
+              ts: Date.now(),
+              wsUrl: url.replace(/[?#].*$/, '').substring(0, 80),
+              data: decoded
+            };
+            // Special handling for ActionReq
+            if (typeName === 'ActionReq' && decoded) {
+              entry.actionName = ACTION_NAMES[decoded.action] || 'UNKNOWN_' + decoded.action;
+              console.log('[ProtoTap v' + VERSION + '] ⚡ OUTGOING', typeName + ':', entry.actionName,
+                '(action=' + decoded.action + ', room=' + decoded.roomId + ', coin=' + decoded.coin + ')');
+            } else {
+              console.log('[ProtoTap v' + VERSION + '] → OUTGOING', typeName);
+            }
+            outgoingActions.push(entry);
+            if (outgoingActions.length > OUTGOING_RING) outgoingActions.shift();
+            busEmit('__outgoing', entry);
+            busEmit('__outgoing_' + typeName, entry);
+            relayEmit(JSON.stringify(entry));
+            break;
+          }
+        } catch (_) {}
+      }
+      return origSend(data);
+    };
+
     // Track close: remove from registry
     ws.addEventListener('close', () => {
       if (sockets.get(url) === ws) sockets.delete(url);
@@ -354,6 +405,9 @@
 
     // Active game WebSocket registry
     sockets,
+
+    // Outgoing action log (from send hook)
+    outgoingActions,
 
     // Send a game action via the proxied socket
     sendAction,
