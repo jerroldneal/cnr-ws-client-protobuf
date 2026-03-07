@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spectator — ClubWPT Gold</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+  h1 { font-size: 1.4rem; margin-bottom: 16px; }
+  h1 span { color: var(--muted); font-weight: 400; font-size: 0.85rem; margin-left: 8px; }
+
+  .status-bar { display: flex; gap: 24px; margin-bottom: 20px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .status-bar .item { display: flex; flex-direction: column; }
+  .status-bar .label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
+  .status-bar .value { font-size: 1.1rem; font-weight: 600; }
+  .status-bar .value.green { color: var(--green); }
+  .status-bar .value.red { color: var(--red); }
+  .status-bar .value.yellow { color: var(--yellow); }
+
+  .board { display: flex; gap: 8px; margin-bottom: 20px; }
+  .card { width: 48px; height: 68px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; }
+  .card.empty { opacity: 0.3; }
+  .card.heart, .card.diamond { color: var(--red); }
+  .card.spade, .card.club { color: var(--text); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { text-align: left; padding: 10px 14px; font-size: 0.75rem; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); letter-spacing: 0.05em; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  tr:last-child td { border-bottom: none; }
+  tr.active-turn { background: rgba(88,166,255,0.08); }
+  tr.folded td { opacity: 0.45; }
+
+  .chip { font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  .badge.dealer { background: #d29922; color: #000; }
+  .badge.sb { background: #388bfd33; color: var(--accent); }
+  .badge.bb { background: #f8514933; color: var(--red); }
+
+  .action { font-weight: 600; text-transform: uppercase; font-size: 0.8rem; }
+  .action.fold { color: var(--muted); }
+  .action.call, .action.check { color: var(--green); }
+  .action.raise, .action.allin { color: var(--yellow); }
+  .action.bet { color: var(--accent); }
+
+  #connection-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  #connection-dot.connected { background: var(--green); }
+  #connection-dot.disconnected { background: var(--red); }
+  #connection-dot.connecting { background: var(--yellow); }
+
+  .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 1rem; }
+</style>
+</head>
+<body>
+
+<h1>
+  <span id="connection-dot" class="connecting"></span>
+  Spectator
+  <span id="connection-label">connecting...</span>
+</h1>
+
+<div class="status-bar" id="status-bar">
+  <div class="item"><span class="label">Hand</span><span class="value" id="hand-num">—</span></div>
+  <div class="item"><span class="label">Street</span><span class="value" id="street">—</span></div>
+  <div class="item"><span class="label">Players</span><span class="value" id="player-count">0</span></div>
+  <div class="item"><span class="label">Pot</span><span class="value green" id="pot-total">0</span></div>
+  <div class="item"><span class="label">Blinds</span><span class="value" id="blinds">—</span></div>
+  <div class="item"><span class="label">Dealer</span><span class="value yellow" id="dealer-seat">—</span></div>
+</div>
+
+<div class="board" id="board">
+  <div class="card empty">?</div>
+  <div class="card empty">?</div>
+  <div class="card empty">?</div>
+  <div class="card empty">?</div>
+  <div class="card empty">?</div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Seat</th>
+      <th>Player</th>
+      <th>Chips</th>
+      <th>Bet</th>
+      <th>Cards</th>
+      <th>Action</th>
+      <th>Position</th>
+    </tr>
+  </thead>
+  <tbody id="players-body">
+    <tr><td colspan="7" class="empty-state">Waiting for game data...</td></tr>
+  </tbody>
+</table>
+
+<script>
+const RANKS = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+const SUITS = { 0: '♣', 1: '♦', 2: '♥', 3: '♠' };
+const SUIT_CLASS = { 0: 'club', 1: 'diamond', 2: 'heart', 3: 'spade' };
+
+function formatCard(c) {
+  if (!c || c.rank == null) return null;
+  const rank = RANKS[c.rank] || c.rank;
+  const suit = SUITS[c.suit] || '?';
+  const cls = SUIT_CLASS[c.suit] || '';
+  return { text: rank + suit, cls };
+}
+
+function formatChips(n) {
+  if (n == null) return '—';
+  return n.toLocaleString();
+}
+
+// SSE connection
+const evtSource = new EventSource('/events');
+let state = null;
+
+evtSource.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.event === 'status') {
+    updateConnection(msg.data);
+  } else if (msg.event === 'state') {
+    state = msg.data;
+    render(state);
+  }
+};
+
+evtSource.onerror = () => updateConnection('disconnected');
+
+function updateConnection(status) {
+  const dot = document.getElementById('connection-dot');
+  const label = document.getElementById('connection-label');
+  dot.className = status;
+  label.textContent = status;
+}
+
+function render(s) {
+  if (!s) return;
+
+  document.getElementById('hand-num').textContent = s.handNum || '—';
+  document.getElementById('street').textContent = s.street || 'idle';
+  document.getElementById('player-count').textContent = s.playerCount || 0;
+  document.getElementById('pot-total').textContent = formatChips(s.potTotal);
+  document.getElementById('dealer-seat').textContent = s.dealerSeat != null ? `S${s.dealerSeat}` : '—';
+
+  if (s.blinds) {
+    document.getElementById('blinds').textContent =
+      `${formatChips(s.blinds.small)} / ${formatChips(s.blinds.big)}`;
+  }
+
+  // Board cards
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const c = s.board && s.board[i] ? formatCard(s.board[i]) : null;
+    const div = document.createElement('div');
+    div.className = c ? `card ${c.cls}` : 'card empty';
+    div.textContent = c ? c.text : '?';
+    boardEl.appendChild(div);
+  }
+
+  // Players table
+  const tbody = document.getElementById('players-body');
+  const players = s.players || {};
+  const seats = Object.keys(players).map(Number).sort((a, b) => a - b);
+
+  if (seats.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No players seated</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '';
+  for (const seat of seats) {
+    const p = players[seat];
+    const tr = document.createElement('tr');
+
+    // Highlight active turn
+    if (s.currentAction && s.currentAction.seatNum === seat) {
+      tr.className = 'active-turn';
+    }
+    if (p.state === 'folded') {
+      tr.classList.add('folded');
+    }
+
+    // Seat
+    const tdSeat = document.createElement('td');
+    tdSeat.textContent = seat;
+    tr.appendChild(tdSeat);
+
+    // Name
+    const tdName = document.createElement('td');
+    tdName.textContent = p.nickName || p.userId || '—';
+    if (s.heroSeat === seat) tdName.innerHTML += ' <small style="color:var(--accent)">(hero)</small>';
+    tr.appendChild(tdName);
+
+    // Chips
+    const tdChips = document.createElement('td');
+    tdChips.className = 'chip';
+    tdChips.textContent = formatChips(p.coin);
+    tr.appendChild(tdChips);
+
+    // Bet
+    const tdBet = document.createElement('td');
+    tdBet.className = 'chip';
+    tdBet.textContent = p.bet ? formatChips(p.bet) : '—';
+    tr.appendChild(tdBet);
+
+    // Cards
+    const tdCards = document.createElement('td');
+    const holeCards = s.holeCards && s.holeCards[seat];
+    if (holeCards && holeCards.length) {
+      tdCards.innerHTML = holeCards.map(c => {
+        const f = formatCard(c);
+        return f ? `<span class="card ${f.cls}" style="width:32px;height:44px;font-size:0.8rem;display:inline-flex">${f.text}</span>` : '';
+      }).join(' ');
+    } else {
+      tdCards.textContent = seat === s.heroSeat ? '—' : '••';
+    }
+    tr.appendChild(tdCards);
+
+    // Last action
+    const tdAction = document.createElement('td');
+    const lastAction = p.lastAction || '';
+    tdAction.className = `action ${lastAction.toLowerCase()}`;
+    tdAction.textContent = lastAction || '—';
+    tr.appendChild(tdAction);
+
+    // Position badge
+    const tdPos = document.createElement('td');
+    if (s.dealerSeat === seat) {
+      tdPos.innerHTML = '<span class="badge dealer">D</span>';
+    }
+    tr.appendChild(tdPos);
+
+    tbody.appendChild(tr);
+  }
+}
+</script>
+</body>
+</html>

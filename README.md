@@ -8,10 +8,58 @@ Protobuf WebSocket tap, poker decision engine, Chrome extension popup, and React
 
 This module provides the core components for intercepting, decoding, and acting on protobuf-encoded WebSocket traffic from ClubWPT Gold poker games. It is designed to be injected into the game page via the [`cnr-ws-extension`](https://github.com/jerroldneal/cnr-ws-extension) Chrome extension.
 
+## Quick Start — Spectator Webapp
+
+The fastest way to see the library in action. A self-contained Node.js server that connects to a game table, decodes all protobuf messages, and streams live state to a browser dashboard.
+
+```bash
+# Install dependencies
+npm install
+
+# Run the spectator server
+node examples/spectator-webapp/server.js \
+  --url wss://game-server.example.com/ws \
+  --userId 12345 \
+  --token your-auth-token
+
+# Open http://localhost:3900
+```
+
+The dashboard shows real-time player information: names, chip stacks, bets, hole cards (when visible), board cards, pot, blinds, dealer position, and whose turn it is. See [`examples/spectator-webapp/README.md`](examples/spectator-webapp/README.md) for details.
+
 ## Structure
 
 ```
 cnr-ws-client-protobuf/
+├── lib/
+│   ├── proto/             # Atomic protobuf encode/decode modules
+│   │   ├── _schema.js     # protobufjs type registry
+│   │   ├── enums.js       # All frozen enums (Action, PlayerState, MessageId, etc.)
+│   │   ├── wrapper.js     # Wire framing: encode/decode/parseStream
+│   │   ├── auth.js        # UserToken request/response
+│   │   ├── room.js        # EnterRoom, RoomSnapshot, SitDown, LeaveRoom
+│   │   ├── game-flow.js   # DealerPos, HoleCards, BoardCards, NeedAction, Action, etc.
+│   │   ├── seats.js       # SeatOccupied, SeatEmpty, PlayerLeave
+│   │   ├── social.js      # Emoji, Anim, Voice, Celebrity
+│   │   ├── tournament.js  # MTT enter, rejoin, snapshot, notifications
+│   │   ├── time-bank.js   # TimeBank, BuyTime
+│   │   ├── rewards.js     # Reward, EnterReward
+│   │   ├── system.js      # Ping, Pong, RealIp
+│   │   └── index.js       # Re-exports + decoderRegistry
+│   └── use-cases/         # High-level poker modules
+│       ├── spectator.js       # Passive game observation (17 events)
+│       ├── hand-tracker.js    # Hand lifecycle state machine
+│       ├── player-tracker.js  # Player join/leave registry
+│       ├── action-engine.js   # Decision execution with validation
+│       ├── tournament-manager.js  # MTT lifecycle
+│       ├── pot-calculator.js  # Pot progression tracking
+│       ├── position-tracker.js    # Dealer/SB/BB positions
+│       ├── hand-history.js    # Hand history recording + toText()
+│       ├── connection-manager.js  # WebSocket + auth + keep-alive
+│       ├── table-state.js     # God view aggregate + getSnapshot()
+│       └── index.js           # Re-exports all use cases
+├── examples/
+│   └── spectator-webapp/  # Quick start example (see above)
 ├── inject/
 │   ├── proto-tap.js       # WebSocket proxy + protobuf decoder (v2)
 │   └── proto-bot.js       # Self-contained poker decision engine
@@ -25,6 +73,47 @@ cnr-ws-client-protobuf/
 ├── dashboard/
 │   └── index.html         # React 18 SPA — Feed, Table, Console, Stats tabs
 └── package.json
+```
+
+## Library Usage
+
+### Atomic Proto Modules
+
+```js
+const proto = require('./lib/proto');
+
+// Decode any message by topic ID
+const decoded = proto.decodeByTopic(topicId, bodyBuffer);
+// → { topic: 301, name: 'RoomSnapshotMsg', fields: { roomId, players, ... } }
+
+// Encode an action
+const { topic, body } = proto.encodeActionReq({ action: proto.Action.RAISE, coin: 500 });
+
+// Parse a binary stream into individual messages
+const { messages, remaining } = proto.parseStream(buffer);
+```
+
+### Use-Case Modules
+
+```js
+const { ConnectionManager, TableState, PlayerTracker, Spectator } = require('./lib/use-cases');
+
+// Connect and observe
+const conn = new ConnectionManager({ url, userId, token });
+const table = new TableState(userId);
+
+conn.on('message', (msg) => table.onMessage(msg));
+
+table.on('state-change', ({ key, value }) => {
+  console.log(`${key} changed:`, value);
+});
+
+table.on('new-hand', () => {
+  const snap = table.getSnapshot();
+  console.log(`Hand #${snap.handNum} — ${snap.playerCount} players`);
+});
+
+conn.connect();
 ```
 
 ## Components
